@@ -8,9 +8,6 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
-variable "my_public_key" {
-  type        = string
-}
 
 variable "lecturer_public_key" {
   type        = string
