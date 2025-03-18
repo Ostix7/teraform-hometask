@@ -1,0 +1,47 @@
+- name: Install PostgreSQL
+  apt:
+    update_cache: yes
+    name: [postgresql, postgresql-client, postgresql-contrib]
+    state: present
+
+- name: Ensure postgresql.conf
+  blockinfile:
+    path: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+    block: |
+      listen_addresses = '*'
+      wal_level = replica
+      max_wal_senders = 5
+      hot_standby = on
+
+- name: Create replication user
+  become_user: postgres
+  postgresql_user:
+    name: "{{ replication_user }}"
+    password: "{{ replication_password }}"
+    role_attr_flags: "REPLICATION LOGIN"
+
+- name: Create test DB
+  become_user: postgres
+  postgresql_db:
+    name: test_db
+
+- name: Allow replication from replica
+  lineinfile:
+    path: "/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf"
+    regexp: '^host\s+replication\s+{{ replication_user }}'
+    line: "host replication {{ replication_user }} {{ hostvars['server2'].ansible_host }}/32 md5"
+    state: present
+
+- name: Restart PostgreSQL
+  service:
+    name: postgresql
+    state: restarted
+
+- name: Check replication status on master
+  become: yes
+  shell: sudo -u postgres psql -c "SELECT pid, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
+  register: replication_status
+
+- name: Output replication status
+  debug:
+    var: replication_status.stdout_lines

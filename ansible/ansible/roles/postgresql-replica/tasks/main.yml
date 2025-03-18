@@ -1,0 +1,41 @@
+- name: Install PostgreSQL
+  apt:
+    update_cache: yes
+    name: [postgresql, postgresql-client, postgresql-contrib]
+    state: present
+
+- name: Stop PostgreSQL
+  service:
+    name: postgresql
+    state: stopped
+
+- name: Remove old data
+  file:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+    state: absent
+
+- name: Create empty dir
+  file:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+
+- name: Base backup
+  become_user: postgres
+  shell: |
+    pg_basebackup -h {{ hostvars['server1'].ansible_host }} -U {{ replication_user }} -D /var/lib/postgresql/{{ postgres_version }}/main -P -X stream
+
+- name: Configure replica
+  blockinfile:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main/postgresql.auto.conf"
+    block: |
+      primary_conninfo = 'host={{ hostvars['server1'].ansible_host }} user={{ replication_user }} password={{ replication_password }}'
+      primary_slot_name = 'replica_slot'
+      recovery_target_timeline = 'latest'
+
+- name: Start PostgreSQL
+  service:
+    name: postgresql
+    state: started
